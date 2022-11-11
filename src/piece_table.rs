@@ -19,7 +19,6 @@ pub struct PieceSearch {
     piece_start: u32,
 }
 
-
 impl PieceTable {
     pub fn new() -> Self {
         PieceTable {
@@ -70,6 +69,29 @@ impl PieceTable {
         }
 
         None
+    }
+
+    fn find_pieces_in_range(pieces: &mut Vec<Piece>, offset: u32, length: u32) -> Vec<PieceSearch> {
+        let mut cursor = 0;
+        let mut searches: Vec<PieceSearch> = Vec::new();
+
+        for (i, p) in pieces.iter().enumerate() {
+            if cursor + p.length >= offset {
+                searches.push(PieceSearch {
+                    piece: *p, 
+                    index: i as u32, 
+                    piece_start: cursor,
+                });
+                
+                if cursor + p.length >= offset + length {
+                    return searches;
+                }
+            }
+
+            cursor += p.length;
+        }
+
+        searches
     }
 
     fn is_offset_valid(pieces: &Vec<Piece>, offset: u32) -> bool {
@@ -153,7 +175,7 @@ impl PieceTable {
 
         true
     }
-
+    
     pub fn delete(&mut self, offset: u32, length: u32) -> bool {
         let pieces = &mut self.pieces;
 
@@ -162,49 +184,87 @@ impl PieceTable {
             return false;
         }
 
-        let search_opt = Self::find_piece_at_offset(pieces, offset);
-        match search_opt {
-            Some(piece_search) => {
-                let piece_end = piece_search.piece_start + piece_search.piece.length;
+        println!("{:?}", pieces);
 
-                // Split Piece into 2
-                let piece_one_len = offset - piece_search.piece_start;
-                let piece_two_len = piece_end - offset - length;
+        let mut searches = Self::find_pieces_in_range(pieces, offset, length);
 
-                let mut idx = piece_search.index;
-                // Remove the piece from the pieces
-                pieces.remove(piece_search.index as usize);
+        match searches.len() {
+            n if n >= 2 => {
+                // Remove all the inner pieces and grab the total length 
+                let last = searches.pop().unwrap();
+                let first = searches.swap_remove(0);
 
-                // Create Piece for the first split
+                let mut total_length = 0;
+                for s in searches {
+                    total_length += s.piece.length;
+                }
+
+                for idx in (first.index..(last.index + 1)).rev() {
+                    pieces.remove(idx as usize);
+                }
+
+                let rest = length - (first.piece_start + first.piece.length - offset) - total_length;
+                let first_piece_end = first.piece.offset + first.piece.length;
+                let piece_one_len = offset - first.piece_start;
+                let piece_two_offset = last.piece.offset + rest;
+                let piece_two_len = last.piece.length - rest;
+
+                let mut idx = first.index;
                 if piece_one_len > 0 {
                     let p_one = Piece {
-                        is_add: piece_search.piece.is_add,
-                        offset: piece_search.piece.offset,
+                        is_add: first.piece.is_add,
+                        offset: first.piece.offset,
                         length: piece_one_len,
                     };
-
                     pieces.insert(idx as usize, p_one);
                     idx += 1;
                 }
 
-                // Create Piece for the second split
                 if piece_two_len > 0 {
                     let p_two = Piece {
-                        is_add: piece_search.piece.is_add,
-                        offset: piece_search.piece.offset + piece_one_len + length,
+                        is_add: last.piece.is_add,
+                        offset: piece_two_offset,
+                        length: piece_two_len,
+                    };
+                    pieces.insert(idx as usize, p_two);
+                    idx += 1;
+                }
+                
+            },
+            1 => {
+                let p = searches[0];
+
+                pieces.remove(p.index as usize);
+
+                let piece_one_len = offset - p.piece_start;
+                let piece_two_len = (p.piece_start + p.piece.length) - (offset + length);
+
+                let mut idx = p.index;
+                if piece_one_len > 0 {
+                    let p_one = Piece {
+                        is_add: p.piece.is_add,
+                        offset: p.piece.offset,
+                        length: piece_one_len,
+                    };
+                    pieces.insert(idx as usize, p_one);
+                    idx += 1;
+                }
+
+                if piece_two_len > 0 {
+                    let p_two = Piece {
+                        is_add: p.piece.is_add,
+                        offset: p.piece.offset + piece_one_len + length,
                         length: piece_two_len,
                     };
                     pieces.insert(idx as usize, p_two);
                 }
-
             },
-            None => {
-                // TODO: Possible at the end of the line?
-            }
-        }
-        
-        
-        false
+            _ => {
+                return false;
+            },
+        };
+
+        true
     }
 
     pub fn read(&mut self) -> String {

@@ -10,7 +10,7 @@ struct Cursor {
     x: u32,
     y: u32,
     font_size: (u32, u32),
-    cursor_line: bool
+    cursor_line: bool,
 }
 
 impl Cursor {
@@ -29,6 +29,10 @@ impl Cursor {
         canvas.fill_rect(cursor_line).unwrap();
 
         canvas.set_blend_mode(original_blend);
+    }
+
+    fn get_current_line(&self) -> u32 {
+        self.y / self.font_size.0
     }
 }
 
@@ -110,6 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Left),
                     ..
                 } =>  {
+                    // TODO: limit to the text range
                     if cursor.x != 0 {
                         cursor.x -= cursor.font_size.0;
                     }
@@ -118,17 +123,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Right),
                     ..
                 } => {
+                    // TODO: limit to the text range
                     cursor.x += cursor.font_size.0;
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => {
+                    // TODO: limit to the text range
+                    if cursor.y != 0 {
+                        cursor.y -= cursor.font_size.1;
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    // TODO: limit to the text range
+                    cursor.y += cursor.font_size.1;
                 },
                 Event::KeyDown {
                     keycode: Some(Keycode::Backspace),
                     ..
                 } => {
                     // Delete 1 char from position
+                    if cursor.x != 0 {
+                        if !pt.delete((cursor.x / font_size.0) - 1, 1) {
+                            println!("Failed to delete character ({})", (cursor.x / font_size.0) - 1);
+                        } else {
+                            cursor.x -= font_size.0;
+                        }
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::Return),
+                    ..
+                } => {
+                    if !pt.insert("\n", cursor.x / font_size.0) {
+                        println!("Failed to insert newline at index: {}", cursor.x / font_size.0);
+                    }
                 },
                 Event::TextInput { text, .. } => {
                     if !pt.insert(&text, cursor.x / font_size.0) {
-                        println!("Write denied ({} at index: {})", &text, cursor.x);
+                        println!("Write denied ({} at index: {})", &text, cursor.x / font_size.0);
                     } else {
                         // Move cursor along
                         cursor.x += (text.len() as u32 * font_size.0);
@@ -144,10 +181,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let content = pt.read();
         &glyph_atlas.set_color_mod(189, 179, 149);
         &glyph_atlas.set_blend_mode(sdl2::render::BlendMode::Blend);
+        let mut line = 0;
+        let mut carriage = 0;
         for (idx, c) in content.chars().enumerate() {
+            if c == '\n' {
+                line += 1;
+                carriage = 0;
+                continue;
+            }
+
             let pos = mapping[c as usize];
             let src = Rect::new(pos.0, pos.1, font_size.0, font_size.1);
-            let dst = Rect::new((idx as u32 * font_size.0) as i32, 0 as i32, font_size.0, font_size.1);
+            let dst = Rect::new((carriage * font_size.0) as i32, (font_size.1 * line) as i32, font_size.0, font_size.1);
+            carriage+=1;
             canvas.copy(&glyph_atlas, Some(src), Some(dst)).unwrap();
         };
         
