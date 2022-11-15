@@ -1,40 +1,11 @@
 use std::collections::VecDeque;
 
 mod piece_table;
+mod cursor;
 
 use piece_table::PieceTable;
+use cursor::Cursor;
 use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, TextureQuery, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
-
-#[derive(Clone)]
-struct Cursor {
-    x: u32,
-    y: u32,
-    font_size: (u32, u32),
-    cursor_line: bool,
-}
-
-impl Cursor {
-    fn render(&mut self, canvas: &mut Canvas<Window>) {
-        let r = Rect::new(self.x as i32, self.y as i32, self.font_size.0, self.font_size.1);
-        let original_blend = canvas.blend_mode();
-
-        canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
-        canvas.set_draw_color(Color::RGBA(255, 255, 255, 100));
-        canvas.fill_rect(r).unwrap();
-
-        canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
-        canvas.set_draw_color(Color::RGBA(255, 0, 0, 50));
-        let canvas_size = canvas.output_size().expect("");
-        let cursor_line = Rect::new(0, self.y as i32, canvas_size.0, self.font_size.1);
-        canvas.fill_rect(cursor_line).unwrap();
-
-        canvas.set_blend_mode(original_blend);
-    }
-
-    fn get_current_line(&self) -> u32 {
-        self.y / self.font_size.0
-    }
-}
 
 type GlyphPosition = (i32, i32);
 
@@ -94,16 +65,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let font = ttf_context.load_font("font.ttf", 15).expect("Failed to load font.");
 
     let font_size = font.size_of("W")?;
-    let mut cursor = Cursor { x: 0, y: 0, font_size: font_size, cursor_line: true };
+    let mut cursor = Cursor::new(font_size);
 
     let (mut glyph_atlas, mapping) = create_glyph_atlas(&mut canvas, &texture_creator, &font, font_size);
 
     let mut event_pump = sdl_context.event_pump().expect("Failed to set up event pump.");
 
     let mut pt = PieceTable::new();
-    pt.append("X");
 
     'running: loop { 
+        // TODO: Only read this again when there are changes
+        let content = pt.read();
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } | Event::KeyDown {
@@ -114,44 +87,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Left),
                     ..
                 } =>  {
-                    // TODO: limit to the text range
-                    if cursor.x != 0 {
-                        cursor.x -= cursor.font_size.0;
+                    if cursor.index != 0 {
+                        cursor.index -= 1;
                     }
                 },
                 Event::KeyDown {
                     keycode: Some(Keycode::Right),
                     ..
                 } => {
-                    // TODO: limit to the text range
-                    cursor.x += cursor.font_size.0;
+                    cursor.index += 1;
+                    if cursor.index > content.len() as u32 {
+                        cursor.index = content.len() as u32;
+                    }
                 },
                 Event::KeyDown {
                     keycode: Some(Keycode::Up),
                     ..
                 } => {
-                    // TODO: limit to the text range
-                    if cursor.y != 0 {
-                        cursor.y -= cursor.font_size.1;
+                    if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, -1) {
+                        cursor.index -= index_diff;
+                        // TODO: DO NOT UNWRAP
+                        if content.chars().nth(cursor.index as usize).unwrap() == '\n' {
+                            cursor.index -= 1;
+                        }
                     }
                 },
                 Event::KeyDown {
-                    keycode: Some(Keycode::Down),
+                   keycode: Some(Keycode::Down),
                     ..
                 } => {
-                    // TODO: limit to the text range
-                    cursor.y += cursor.font_size.1;
+                    if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, 1) {
+                        cursor.index += index_diff;
+                        // TODO: DO NOT UNWRAP
+                        if content.chars().nth(cursor.index as usize).unwrap() == '\n' {
+                            cursor.index -= 1;
+                        }
+                    }
                 },
                 Event::KeyDown {
                     keycode: Some(Keycode::Backspace),
                     ..
                 } => {
-                    // Delete 1 char from position
-                    if cursor.x != 0 {
-                        if !pt.delete((cursor.x / font_size.0) - 1, 1) {
-                            println!("Failed to delete character ({})", (cursor.x / font_size.0) - 1);
+                    println!("Attempt to remove character at index: {}", cursor.index);
+
+                    if cursor.index != 0 {
+                        if !pt.delete(cursor.index - 1, 1) {
+                            println!("Failed to delete character ({})", cursor.index - 1);
                         } else {
-                            cursor.x -= font_size.0;
+                            if cursor.index != 0 {
+                                cursor.index -= 1;
+                            }
                         }
                     }
                 },
@@ -159,27 +144,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Return),
                     ..
                 } => {
-                    if !pt.insert("\n", cursor.x / font_size.0) {
-                        println!("Failed to insert newline at index: {}", cursor.x / font_size.0);
+                    if !pt.insert("\n", cursor.index) {
+                        println!("Failed to insert newline at index: {}", cursor.index);
+                    } else {
+                        cursor.index += 1;
                     }
                 },
                 Event::TextInput { text, .. } => {
-                    if !pt.insert(&text, cursor.x / font_size.0) {
-                        println!("Write denied ({} at index: {})", &text, cursor.x / font_size.0);
+                    // TODO: This should use the last piece as long as possible
+                    // Just expand the length and keep adding onto the add buffer until another
+                    // piece has been added
+
+                    if !pt.insert(&text, cursor.index) {
+                        println!("Write denied ({} at index: {})", &text, cursor.index);
                     } else {
-                        // Move cursor along
-                        cursor.x += (text.len() as u32 * font_size.0);
+                        cursor.index += text.len() as u32;
                     }
                 },
                 _ => {}
             }
+        
+            // Only print on events;
+            println!("{:?}", cursor);
         }
 
-        canvas.set_draw_color(Color::RGBA(40, 77, 73, 255));
+
+        //canvas.set_draw_color(Color::RGBA(40, 77, 73, 255));
+        canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
         canvas.clear();
 
-        let content = pt.read();
-        &glyph_atlas.set_color_mod(189, 179, 149);
+        // &glyph_atlas.set_color_mod(189, 179, 149);
+        &glyph_atlas.set_color_mod(255, 255, 255);
         &glyph_atlas.set_blend_mode(sdl2::render::BlendMode::Blend);
         let mut line = 0;
         let mut carriage = 0;
@@ -196,8 +191,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             carriage+=1;
             canvas.copy(&glyph_atlas, Some(src), Some(dst)).unwrap();
         };
+
+        if cursor.y > font_size.1 * line {
+            cursor.y = line * font_size.1;
+        }
+
+        if cursor.x < 0  {
+            cursor.x = 0;
+        }
+
+        if cursor.y < 0 {
+            cursor.y = 0
+        }
         
-        cursor.render(&mut canvas);
+        //let mut chars_on_current_line = 0;
+        //let mut newlines_count = 0;
+        //for c in content.chars() {
+        //    if c == '\n' {
+        //        if newlines_count == cursor.get_current_line(&content) {
+        //            break;
+        //        }
+
+        //        newlines_count += 1;
+        //        chars_on_current_line = 0;
+        //        continue;
+        //    }
+
+        //    chars_on_current_line += 1;
+        //}
+
+        //if cursor.x > chars_on_current_line * font_size.0 {
+        //    cursor.x = chars_on_current_line * font_size.0;
+        //}
+
+        cursor.render(&mut canvas, &content);
 
         canvas.present();
     }

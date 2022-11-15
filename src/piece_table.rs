@@ -184,8 +184,6 @@ impl PieceTable {
             return false;
         }
 
-        println!("{:?}", pieces);
-
         let mut searches = Self::find_pieces_in_range(pieces, offset, length);
 
         match searches.len() {
@@ -399,5 +397,26 @@ mod tests {
         pt.delete(4, 3);
 
         assert_eq!(pt.read(), "Hellrld");
+    }
+
+    #[test]
+    fn delete_one_character_in_pieces_of_1_char() {
+        let mut pt = PieceTable::init(String::from("A"));
+        pt.append("B");
+        pt.append("C");
+        pt.append("D");
+
+        pt.delete(1, 1);
+
+        assert_eq!(pt.read(), "ACD");
+    }
+
+    #[test]
+    fn delete_on_empty_buffer() {
+        let mut pt = PieceTable::new();
+
+        pt.delete(0, 1);
+
+        assert_eq!(pt.read(), "");
     }
 }
