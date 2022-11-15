@@ -218,26 +218,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if cursor.y < 0 {
             cursor.y = 0
         }
-        
-        //let mut chars_on_current_line = 0;
-        //let mut newlines_count = 0;
-        //for c in content.chars() {
-        //    if c == '\n' {
-        //        if newlines_count == cursor.get_current_line(&content) {
-        //            break;
-        //        }
-
-        //        newlines_count += 1;
-        //        chars_on_current_line = 0;
-        //        continue;
-        //    }
-
-        //    chars_on_current_line += 1;
-        //}
-
-        //if cursor.x > chars_on_current_line * font_size.0 {
-        //    cursor.x = chars_on_current_line * font_size.0;
-        //}
 
         cursor.render(&mut canvas, &content);
 
