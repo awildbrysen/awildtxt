@@ -1,11 +1,11 @@
-use std::collections::VecDeque;
-
 mod piece_table;
 mod cursor;
+mod file;
 
 use piece_table::PieceTable;
 use cursor::Cursor;
-use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, TextureQuery, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
+use file::read_file;
+use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
 
 type GlyphPosition = (i32, i32);
 
@@ -20,7 +20,6 @@ fn create_glyph_atlas<'canvas>(canvas: &mut Canvas<Window>, creator: &'canvas Te
     let mut mapping: [GlyphPosition; 128] = [(0,0);128];
 
     canvas.with_texture_canvas(&mut texture, |canv| {
-
         for i in 0..128 {
             let c_opt = char::from_u32(i);
             match c_opt {
@@ -41,9 +40,27 @@ fn create_glyph_atlas<'canvas>(canvas: &mut Canvas<Window>, creator: &'canvas Te
                 None => {}
             }
         }
-    });
+    }).expect("Failed to create glyph atlas");
 
     (texture, mapping)
+}
+
+fn render_text(canvas: &mut Canvas<Window>, glyph_atlas: &mut Texture, mapping: [GlyphPosition; 128], font_size: (u32, u32), text: &String, x: i32, y: i32) {
+    let mut line = 0;
+    let mut carriage = 0;
+    for c in text.chars() {
+        if c == '\n' {
+            line += 1;
+            carriage = 0;
+            continue;
+        }
+
+        let pos = mapping[c as usize];
+        let src = Rect::new(pos.0, pos.1, font_size.0, font_size.1);
+        let dst = Rect::new(x + (carriage * font_size.0) as i32, y + (font_size.1 * line) as i32, font_size.0, font_size.1);
+        carriage+=1;
+        canvas.copy(&glyph_atlas, Some(src), Some(dst)).unwrap();
+    };
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -70,6 +87,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut glyph_atlas, mapping) = create_glyph_atlas(&mut canvas, &texture_creator, &font, font_size);
 
     let mut event_pump = sdl_context.event_pump().expect("Failed to set up event pump.");
+
+    // TODO: This should be extracted, no clue how yet
+    let mut render_file_path_input = false;
+    let mut file_path_input_pt = PieceTable::new();
 
     let mut pt = PieceTable::new();
 
@@ -143,7 +164,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Backspace),
                     ..
                 } => {
-                    println!("Attempt to remove character at index: {}", cursor.index);
+                    if render_file_path_input {
+                        let data = &file_path_input_pt.read();
+                        if data.len() > 0 {
+                            file_path_input_pt.delete(data.len() as u32 - 1, 1);
+                        }
+                        continue;
+                    }
 
                     if cursor.index != 0 {
                         if !pt.delete(cursor.index - 1, 1) {
@@ -159,17 +186,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Return),
                     ..
                 } => {
+                    if render_file_path_input {
+                        // TODO: don't just overwrite current content
+                        // Either create some buffer system or (prompt for) save
+                        if let Ok(content) = read_file(&file_path_input_pt.read()) {
+                            pt = PieceTable::init(content);
+                            cursor.index = 0;
+                        }
+                        render_file_path_input = false;
+                        continue;
+                    }
+
                     if !pt.insert("\n", cursor.index) {
                         println!("Failed to insert newline at index: {}", cursor.index);
                     } else {
                         cursor.index += 1;
                     }
                 },
+                Event::KeyDown {
+                    keymod: sdl2::keyboard::Mod::LCTRLMOD,
+                    keycode: Some(Keycode::O),
+                    ..
+                } => {
+                    // file picker -> type file path at the bottom of the window
+                    render_file_path_input = true;
+                    file_path_input_pt = PieceTable::new();
+                    
+                },
                 Event::TextInput { text, .. } => {
+                    if render_file_path_input {
+                        file_path_input_pt.append(&text);
+                        continue;
+                    }
+
                     // TODO: This should use the last piece as long as possible
                     // Just expand the length and keep adding onto the add buffer until another
                     // piece has been added
-
                     if !pt.insert(&text, cursor.index) {
                         println!("Write denied ({} at index: {})", &text, cursor.index);
                     } else {
@@ -178,9 +230,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
                 _ => {}
             }
-        
-            // Only print on events;
-            println!("{:?}", cursor);
         }
 
 
@@ -188,12 +237,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
         canvas.clear();
 
-        // &glyph_atlas.set_color_mod(189, 179, 149);
-        &glyph_atlas.set_color_mod(255, 255, 255);
-        &glyph_atlas.set_blend_mode(sdl2::render::BlendMode::Blend);
+        // glyph_atlas.set_color_mod(189, 179, 149);
+        glyph_atlas.set_color_mod(255, 255, 255);
+        glyph_atlas.set_blend_mode(sdl2::render::BlendMode::Blend);
         let mut line = 0;
         let mut carriage = 0;
-        for (idx, c) in content.chars().enumerate() {
+        for c in content.chars() {
             if c == '\n' {
                 line += 1;
                 carriage = 0;
@@ -207,16 +256,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             canvas.copy(&glyph_atlas, Some(src), Some(dst)).unwrap();
         };
 
-        if cursor.y > font_size.1 * line {
-            cursor.y = line * font_size.1;
-        }
+        //let window_size = &window.size();
+        if render_file_path_input {
+            render_text(&mut canvas, &mut glyph_atlas, mapping, font_size, &String::from("Open file:"), 3, 878 - font_size.1 as i32);
 
-        if cursor.x < 0  {
-            cursor.x = 0;
-        }
+            canvas.set_draw_color(Color::RGBA(255, 255, 255, 255));
+            let file_picker_bg = Rect::new(0, 880, 1920, font_size.1 + 10);
+            canvas.fill_rect(file_picker_bg).unwrap();
 
-        if cursor.y < 0 {
-            cursor.y = 0
+            glyph_atlas.set_color_mod(0, 0, 0);
+            glyph_atlas.set_blend_mode(sdl2::render::BlendMode::Blend);
+            render_text(&mut canvas, &mut glyph_atlas, mapping, font_size, &file_path_input_pt.read(), 3, 885);
         }
 
         cursor.render(&mut canvas, &content);

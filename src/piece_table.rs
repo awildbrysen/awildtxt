@@ -202,7 +202,6 @@ impl PieceTable {
                 }
 
                 let rest = length - (first.piece_start + first.piece.length - offset) - total_length;
-                let first_piece_end = first.piece.offset + first.piece.length;
                 let piece_one_len = offset - first.piece_start;
                 let piece_two_offset = last.piece.offset + rest;
                 let piece_two_len = last.piece.length - rest;
@@ -225,7 +224,6 @@ impl PieceTable {
                         length: piece_two_len,
                     };
                     pieces.insert(idx as usize, p_two);
-                    idx += 1;
                 }
                 
             },

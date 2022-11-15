@@ -1,4 +1,4 @@
-use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, TextureQuery, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
+use sdl2::{pixels::{Color}, render::{Canvas}, video::{Window}, rect::Rect};
 
 #[derive(Clone, Debug)]
 pub struct Cursor {
@@ -141,31 +141,6 @@ impl Cursor {
         }
 
         lines
-    }
-
-    pub fn get_current_index(&self, content: &String) -> Option<u32> {
-        let current_line = self.get_current_line(content);
-        let mut chars_on_line = 0;
-        let mut chars_total = 0;
-        let mut lines = 0;
-
-        let chars_till_cursor_pos = self.x / self.font_size.0;
-
-        for (i, c) in content.chars().enumerate() {
-            if c == '\n' {
-                lines+=1;
-                chars_on_line = 0;
-                continue;
-            }
-            
-            if lines == current_line && chars_on_line == chars_till_cursor_pos {
-                return Some(i as u32);
-                break;
-            }
-            chars_on_line+=1;
-        }
-
-        None
     }
 }
 
