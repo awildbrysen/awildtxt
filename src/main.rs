@@ -6,7 +6,7 @@ use piece_table::PieceTable;
 use cursor::Cursor;
 use file::read_file;
 use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
-use std::{env, thread, time, ptr, mem};
+use std::{env, thread, time, ptr::{self, addr_of}, mem};
 use sdl2::sys::SDL_PushEvent;
 
 type GlyphPosition = (i32, i32);
@@ -108,24 +108,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread::spawn(move ||{
         thread::sleep(time::Duration::from_secs(5));
 
-        println!("Start sending events");
-
         let event = sdl2::sys::SDL_TextInputEvent {
             type_: sdl2::sys::SDL_EventType::SDL_TEXTINPUT as u32,
             windowID: 0, 
             timestamp: 0,
             text: [72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         };
-        let mut ret = std::mem::MaybeUninit::uninit();
-        unsafe { 
-            println!("attempt to create pointer");
-            ptr::copy(&event, ret.as_mut_ptr() as *mut sdl2::sys::SDL_TextInputEvent, 1);
-            println!("attempt to send event");
-            let x = ret.assume_init();
-            println!("event? {:?}", x);
-            SDL_PushEvent(x);
+        unsafe {
+            let addr = addr_of!(event);
+            SDL_PushEvent(addr as *mut sdl2::sys::SDL_Event);
          }
-        // event_sender.push_event(input_event).unwrap();
     });
 
     'running: loop { 
