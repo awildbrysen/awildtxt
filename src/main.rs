@@ -6,6 +6,8 @@ use piece_table::PieceTable;
 use cursor::Cursor;
 use file::read_file;
 use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
+use std::{env, thread, time, ptr, mem};
+use sdl2::sys::SDL_PushEvent;
 
 type GlyphPosition = (i32, i32);
 
@@ -64,6 +66,11 @@ fn render_text(canvas: &mut Canvas<Window>, glyph_atlas: &mut Texture, mapping: 
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let test_mode: bool = env::var("AWILDTXT_TEST").is_ok();
+    if test_mode {
+        println!("Launching in test mode");
+    }
+
     let sdl_context = sdl2::init().expect("Failed to initialize SDL");
     let video_subsystem = sdl_context.video().expect("Failed to initialize video subsystem");
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).expect("Failed to initialize TTF");
@@ -93,6 +100,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut file_path_input_pt = PieceTable::new();
 
     let mut pt = PieceTable::new();
+
+    let event_subsystem = sdl_context.event().unwrap();
+    let event_sender = event_subsystem.event_sender();
+
+    // TODO: Can I spawn a thread here and then feed keyboard commands in?
+    thread::spawn(move ||{
+        thread::sleep(time::Duration::from_secs(5));
+
+        println!("Start sending events");
+
+        let event = sdl2::sys::SDL_TextInputEvent {
+            type_: sdl2::sys::SDL_EventType::SDL_TEXTINPUT as u32,
+            windowID: 0, 
+            timestamp: 0,
+            text: [72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        };
+        let mut ret = std::mem::MaybeUninit::uninit();
+        unsafe { 
+            println!("attempt to create pointer");
+            ptr::copy(&event, ret.as_mut_ptr() as *mut sdl2::sys::SDL_TextInputEvent, 1);
+            println!("attempt to send event");
+            let x = ret.assume_init();
+            println!("event? {:?}", x);
+            SDL_PushEvent(x);
+         }
+        // event_sender.push_event(input_event).unwrap();
+    });
 
     'running: loop { 
         // TODO: Only read this again when there are changes
