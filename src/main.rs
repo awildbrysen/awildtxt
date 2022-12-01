@@ -1,13 +1,13 @@
 mod piece_table;
 mod cursor;
 mod file;
+mod util;
 
 use piece_table::PieceTable;
 use cursor::Cursor;
 use file::read_file;
-use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::{Font}};
-use std::{env, thread, time, ptr::{self, addr_of}, mem};
-use sdl2::sys::SDL_PushEvent;
+use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::Font};
+use std::{env, thread, time};
 
 type GlyphPosition = (i32, i32);
 
@@ -24,22 +24,19 @@ fn create_glyph_atlas<'canvas>(canvas: &mut Canvas<Window>, creator: &'canvas Te
     canvas.with_texture_canvas(&mut texture, |canv| {
         for i in 0..128 {
             let c_opt = char::from_u32(i);
-            match c_opt {
-                Some(c) => {
-                    let r = Rect::new((i * font_size.0) as i32, 0, font_size.0, font_size.1);
-                    if c == '\0' {
-                        continue;
-                    }
-
-                    let surface = font.render_char(c)
-                        .blended(Color::RGBA(255, 255, 255, 255))
-                        .unwrap();
-                    let char_texture = creator.create_texture_from_surface(&surface).unwrap();
-
-                    canv.copy(&char_texture, None, Some(r)).unwrap();
-                    mapping[i as usize] = (r.x, r.y);
+            if let Some(c) = c_opt {
+                let r = Rect::new((i * font_size.0) as i32, 0, font_size.0, font_size.1);
+                if c == '\0' {
+                    continue;
                 }
-                None => {}
+
+                let surface = font.render_char(c)
+                    .blended(Color::RGBA(255, 255, 255, 255))
+                    .unwrap();
+                let char_texture = creator.create_texture_from_surface(&surface).unwrap();
+
+                canv.copy(&char_texture, None, Some(r)).unwrap();
+                mapping[i as usize] = (r.x, r.y);
             }
         }
     }).expect("Failed to create glyph atlas");
@@ -66,10 +63,10 @@ fn render_text(canvas: &mut Canvas<Window>, glyph_atlas: &mut Texture, mapping: 
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let test_mode: bool = env::var("AWILDTXT_TEST").is_ok();
-    if test_mode {
-        println!("Launching in test mode");
-    }
+    let test_var = env::var("AWILDTXT_TEST");
+    println!("Test mode: {:?}", test_var);
+
+    let test_mode = test_var.is_ok();
 
     let sdl_context = sdl2::init().expect("Failed to initialize SDL");
     let video_subsystem = sdl_context.video().expect("Failed to initialize video subsystem");
@@ -102,23 +99,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut pt = PieceTable::new();
 
     let event_subsystem = sdl_context.event().unwrap();
-    let event_sender = event_subsystem.event_sender();
+    let _event_sender = event_subsystem.event_sender();
 
-    // TODO: Can I spawn a thread here and then feed keyboard commands in?
-    thread::spawn(move ||{
-        thread::sleep(time::Duration::from_secs(5));
+    let mut background_color = Color {r: 0, g: 0, b: 0, a: 255};
 
-        let event = sdl2::sys::SDL_TextInputEvent {
-            type_: sdl2::sys::SDL_EventType::SDL_TEXTINPUT as u32,
-            windowID: 0, 
-            timestamp: 0,
-            text: [72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        };
-        unsafe {
-            let addr = addr_of!(event);
-            SDL_PushEvent(addr as *mut sdl2::sys::SDL_Event);
-         }
-    });
+    if test_mode {
+        background_color = Color {r: 88, g: 13, b: 138, a: 255};
+        thread::spawn(||{
+            thread::sleep(time::Duration::from_secs(2));
+            util::push_sdl_text_input_event(util::create_sdl_text_input_event("Hello World!"));
+        });
+    }
 
     'running: loop { 
         // TODO: Only read this again when there are changes
@@ -150,11 +141,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cursor.index += 1;
                     if cursor.index >= content.len() as u32 {
                         cursor.index = content.len() as u32;
-                    } else {
-                        if let Some(c) = content.chars().nth(cursor.index as usize) {
-                            if c == '\n' {
-                                cursor.index += 1;
-                            }
+                    } else if let Some(c) = content.chars().nth(cursor.index as usize) {
+                        if c == '\n' {
+                            cursor.index += 1;
                         }
                     }
 
@@ -201,10 +190,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if cursor.index != 0 {
                         if !pt.delete(cursor.index - 1, 1) {
                             println!("Failed to delete character ({})", cursor.index - 1);
-                        } else {
-                            if cursor.index != 0 {
-                                cursor.index -= 1;
-                            }
+                        } else if cursor.index != 0 {
+                            cursor.index -= 1;
                         }
                     }
                 },
@@ -260,7 +247,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
         //canvas.set_draw_color(Color::RGBA(40, 77, 73, 255));
-        canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
+        canvas.set_draw_color(background_color);
         canvas.clear();
 
         // glyph_atlas.set_color_mod(189, 179, 149);
