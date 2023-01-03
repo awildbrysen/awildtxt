@@ -127,11 +127,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } =>  {
                     if cursor.index != 0 {
                         cursor.index -= 1;
-                        if let Some(c) = content.chars().nth(cursor.index as usize) {
-                            if c == '\n' {
-                                cursor.index -= 1;
-                            }
-                        }
                     }
                 },
                 Event::KeyDown {
@@ -141,13 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cursor.index += 1;
                     if cursor.index >= content.len() as u32 {
                         cursor.index = content.len() as u32;
-                    } else if let Some(c) = content.chars().nth(cursor.index as usize) {
-                        if c == '\n' {
-                            cursor.index += 1;
-                        }
-                    }
-
-
+                    } 
                 },
                 Event::KeyDown {
                     keycode: Some(Keycode::Up),
@@ -155,11 +144,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } => {
                     if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, -1) {
                         cursor.index -= index_diff;
-                        if let Some(c) = content.chars().nth(cursor.index as usize) {
-                            if c == '\n' {
-                                cursor.index -= 1;
-                            }
-                        }
                     }
                 },
                 Event::KeyDown {
@@ -168,11 +152,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } => {
                     if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, 1) {
                         cursor.index += index_diff;
-                        if let Some(c) = content.chars().nth(cursor.index as usize) {
-                            if c == '\n' {
-                                cursor.index -= 1;
-                            }
-                        }
                     }
                 },
                 Event::KeyDown {
@@ -286,6 +265,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         canvas.present();
     }
-
     Ok(())
 }
