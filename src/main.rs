@@ -1,13 +1,11 @@
 mod piece_table;
 mod cursor;
 mod file;
-mod util;
 
 use piece_table::PieceTable;
 use cursor::Cursor;
 use file::read_file;
 use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::Font};
-use std::{env, thread, time};
 
 type GlyphPosition = (i32, i32);
 
@@ -63,11 +61,6 @@ fn render_text(canvas: &mut Canvas<Window>, glyph_atlas: &mut Texture, mapping: 
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let test_var = env::var("AWILDTXT_TEST");
-    println!("Test mode: {:?}", test_var);
-
-    let test_mode = test_var.is_ok();
-
     let sdl_context = sdl2::init().expect("Failed to initialize SDL");
     let video_subsystem = sdl_context.video().expect("Failed to initialize video subsystem");
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).expect("Failed to initialize TTF");
@@ -102,14 +95,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _event_sender = event_subsystem.event_sender();
 
     let mut background_color = Color {r: 0, g: 0, b: 0, a: 255};
-
-    if test_mode {
-        background_color = Color {r: 88, g: 13, b: 138, a: 255};
-        thread::spawn(||{
-            thread::sleep(time::Duration::from_secs(2));
-            util::push_sdl_text_input_event(util::create_sdl_text_input_event("Hello World!"));
-        });
-    }
 
     'running: loop { 
         // TODO: Only read this again when there are changes
