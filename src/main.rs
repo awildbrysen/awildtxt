@@ -159,11 +159,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         continue;
                     }
 
-                    if cursor.index != 0 {
-                        if !pt.delete(cursor.index - 1, 1) {
-                            println!("Failed to delete character ({})", cursor.index - 1);
-                        } else if cursor.index != 0 {
+                    if !text_input_util.is_active() {
+                        if cursor.index != 0 {
                             cursor.index -= 1;
+                        }
+                    } else {
+                        if cursor.index != 0 {
+                            if !pt.delete(cursor.index - 1, 1) {
+                                println!("Failed to delete character ({})", cursor.index - 1);
+                            } else if cursor.index != 0 {
+                                cursor.index -= 1;
+                            }
+                        }
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::Delete),
+                    ..
+                } => {
+                    if text_input_util.is_active() {
+                        if cursor.index < content.len() as u32 {
+                            if !pt.delete(cursor.index, 1) {
+                                println!("Failed to delete character ({})", cursor.index);
+                            } 
                         }
                     }
                 },
@@ -182,10 +200,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         continue;
                     }
 
-                    if !pt.insert("\n", cursor.index) {
-                        println!("Failed to insert newline at index: {}", cursor.index);
-                    } else {
-                        cursor.index += 1;
+                    if text_input_util.is_active() {
+                        if !pt.insert("\n", cursor.index) {
+                            println!("Failed to insert newline at index: {}", cursor.index);
+                        } else {
+                            cursor.index += 1;
+                        }
                     }
                 },
                 Event::KeyDown {
@@ -259,6 +279,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if !text_input_util.is_active() {
                         if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, -1) {
                             cursor.index -= index_diff;
+                        }
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::X),
+                    ..
+                } => {
+                    if cursor.index != 0 {
+                        if !pt.delete(cursor.index, 1) {
+                            println!("Failed to delete character ({})", cursor.index);
                         }
                     }
                 },
