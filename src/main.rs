@@ -96,16 +96,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut background_color = Color {r: 0, g: 0, b: 0, a: 255};
 
+    let text_input_util = video_subsystem.text_input();
+    text_input_util.stop();
+
     'running: loop { 
         // TODO: Only read this again when there are changes
         let content = pt.read();
 
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. } | Event::KeyDown {
+                Event::Quit { .. } => break 'running,
+                Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
-                } => break 'running,
+                } => {
+                    if text_input_util.is_active() {
+                        text_input_util.stop();
+                    }
+                },
                 Event::KeyDown { 
                     keycode: Some(Keycode::Left),
                     ..
@@ -203,6 +211,55 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("Write denied ({} at index: {})", &text, cursor.index);
                     } else {
                         cursor.index += text.len() as u32;
+                    }
+                },
+                Event::KeyDown { 
+                    keycode: Some(Keycode::I),
+                    ..
+                } => {
+                    if !text_input_util.is_active() {
+                        text_input_util.start();
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::H),
+                    ..
+                } => {
+                    if !text_input_util.is_active() {
+                        if cursor.index != 0 {
+                            cursor.index -= 1;
+                        }
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::L),
+                    ..
+                } => {
+                    if !text_input_util.is_active() {
+                        cursor.index += 1;
+                        if cursor.index >= content.len() as u32 {
+                            cursor.index = content.len() as u32;
+                        } 
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::J),
+                    ..
+                } => {
+                    if !text_input_util.is_active() {
+                        if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, 1) {
+                            cursor.index += index_diff;
+                        }
+                    }
+                },
+                Event::KeyDown {
+                    keycode: Some(Keycode::K),
+                    ..                    
+                } => {
+                    if !text_input_util.is_active() {
+                        if let Some(index_diff) = Cursor::calc_new_index(&cursor, &content, -1) {
+                            cursor.index -= index_diff;
+                        }
                     }
                 },
                 _ => {}
