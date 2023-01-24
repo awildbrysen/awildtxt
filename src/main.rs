@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event_subsystem = sdl_context.event().unwrap();
     let _event_sender = event_subsystem.event_sender();
 
-    let mut background_color = Color {r: 0, g: 0, b: 0, a: 255};
+    let background_color = Color {r: 0, g: 0, b: 0, a: 255};
 
     let text_input_util = video_subsystem.text_input();
     text_input_util.stop();
@@ -286,7 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::X),
                     ..
                 } => {
-                    if cursor.index != 0 {
+                    if cursor.index < content.len() as u32 {
                         if !pt.delete(cursor.index, 1) {
                             println!("Failed to delete character ({})", cursor.index);
                         }
@@ -320,7 +320,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             canvas.copy(&glyph_atlas, Some(src), Some(dst)).unwrap();
         };
 
-        //let window_size = &window.size();
         if render_file_path_input {
             render_text(&mut canvas, &mut glyph_atlas, mapping, font_size, &String::from("Open file:"), 3, 878 - font_size.1 as i32);
 
@@ -334,6 +333,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         cursor.render(&mut canvas, &content);
+
+        let canvas_width = canvas.viewport().width();
+        let canvas_height = canvas.viewport().height();
+
+        let width = font_size.0 * 6;
+        let height = font_size.1;
+        let x = canvas_width - width;
+        let y = canvas_height - height;
+
+        let text_mode = if text_input_util.is_active() {
+            "insert"
+        } else {
+            "normal"
+        };
+
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
+        render_text(&mut canvas, &mut glyph_atlas, mapping, font_size, &String::from(text_mode), x as i32, y as i32);
 
         canvas.present();
     }
