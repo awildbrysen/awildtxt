@@ -1,11 +1,13 @@
 mod piece_table;
 mod cursor;
+mod buffer;
 mod file;
 
 use piece_table::PieceTable;
 use cursor::Cursor;
 use file::read_file;
 use sdl2::{pixels::{Color, PixelFormatEnum}, event::Event, keyboard::Keycode, render::{Canvas, Texture, TextureCreator, TextureAccess}, video::{Window, WindowContext}, rect::Rect, ttf::Font};
+use buffer::Buffer;
 
 type GlyphPosition = (i32, i32);
 
@@ -89,10 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut render_file_path_input = false;
     let mut file_path_input_pt = PieceTable::new();
 
-    let mut pt = PieceTable::new();
-
-    let event_subsystem = sdl_context.event().unwrap();
-    let _event_sender = event_subsystem.event_sender();
+    let mut buffer = Buffer::new();
 
     let background_color = Color {r: 0, g: 0, b: 0, a: 255};
 
@@ -101,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     'running: loop { 
         // TODO: Only read this again when there are changes
-        let content = pt.read();
+        let content = buffer.pt.read();
 
         for event in event_pump.poll_iter() {
             match event {
@@ -165,7 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     } else {
                         if cursor.index != 0 {
-                            if !pt.delete(cursor.index - 1, 1) {
+                            if !buffer.pt.delete(cursor.index - 1, 1) {
                                 println!("Failed to delete character ({})", cursor.index - 1);
                             } else if cursor.index != 0 {
                                 cursor.index -= 1;
@@ -179,7 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } => {
                     if text_input_util.is_active() {
                         if cursor.index < content.len() as u32 {
-                            if !pt.delete(cursor.index, 1) {
+                            if !buffer.pt.delete(cursor.index, 1) {
                                 println!("Failed to delete character ({})", cursor.index);
                             } 
                         }
@@ -193,15 +192,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // TODO: don't just overwrite current content
                         // Either create some buffer system or (prompt for) save
                         if let Ok(content) = read_file(&file_path_input_pt.read()) {
-                            pt = PieceTable::init(content);
+                            buffer.pt = PieceTable::init(content);
                             cursor.index = 0;
                         }
                         render_file_path_input = false;
+                        text_input_util.stop();
                         continue;
                     }
 
                     if text_input_util.is_active() {
-                        if !pt.insert("\n", cursor.index) {
+                        if !buffer.pt.insert("\n", cursor.index) {
                             println!("Failed to insert newline at index: {}", cursor.index);
                         } else {
                             cursor.index += 1;
@@ -216,7 +216,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // file picker -> type file path at the bottom of the window
                     render_file_path_input = true;
                     file_path_input_pt = PieceTable::new();
-                    
+                    text_input_util.start();
                 },
                 Event::TextInput { text, .. } => {
                     if render_file_path_input {
@@ -227,7 +227,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // TODO: This should use the last piece as long as possible
                     // Just expand the length and keep adding onto the add buffer until another
                     // piece has been added
-                    if !pt.insert(&text, cursor.index) {
+                    if !buffer.pt.insert(&text, cursor.index) {
                         println!("Write denied ({} at index: {})", &text, cursor.index);
                     } else {
                         cursor.index += text.len() as u32;
@@ -287,7 +287,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ..
                 } => {
                     if cursor.index < content.len() as u32 {
-                        if !pt.delete(cursor.index, 1) {
+                        if !buffer.pt.delete(cursor.index, 1) {
                             println!("Failed to delete character ({})", cursor.index);
                         }
                     }
@@ -297,11 +297,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
 
-        //canvas.set_draw_color(Color::RGBA(40, 77, 73, 255));
         canvas.set_draw_color(background_color);
         canvas.clear();
 
-        // glyph_atlas.set_color_mod(189, 179, 149);
         glyph_atlas.set_color_mod(255, 255, 255);
         glyph_atlas.set_blend_mode(sdl2::render::BlendMode::Blend);
         let mut line = 0;
