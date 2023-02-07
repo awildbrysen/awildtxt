@@ -65,6 +65,7 @@ fn render_text(canvas: &mut Canvas<Window>, glyph_atlas: &mut Texture, mapping: 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sdl_context = sdl2::init().expect("Failed to initialize SDL");
     let video_subsystem = sdl_context.video().expect("Failed to initialize video subsystem");
+    let timer_subsystem = sdl_context.timer().expect("Failed to initialize timer subsystem");
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).expect("Failed to initialize TTF");
 
     let window = video_subsystem
@@ -99,6 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     text_input_util.stop();
 
     'running: loop { 
+        let start_ticks = timer_subsystem.ticks();
         // TODO: Only read this again when there are changes
         let content = buffer.pt.read();
 
@@ -350,6 +352,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         render_text(&mut canvas, &mut glyph_atlas, mapping, font_size, &String::from(text_mode), x as i32, y as i32);
 
         canvas.present();
+
+        let frame_time = timer_subsystem.ticks() - start_ticks;
+        let fps = 1000.0 / frame_time as f32;
+        canvas.window_mut().set_title(&format!("awildtxt - FPS: {fps}"))?;
     }
     Ok(())
 }
